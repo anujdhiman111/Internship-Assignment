@@ -23,7 +23,7 @@ This Node.js application provides APIs for user registration, login, and passwor
 ## API Endpoints
 
 ### User Registration
-- POST /register
+- POST /signup
 > Registers a new user with the provided username, email, and password.
 
 ### User Login
