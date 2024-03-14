@@ -167,7 +167,7 @@ app.put("/post/:userId/:postId", async (req, res) => {
         .status(404)
         .json({ message: "Post not found or not authorized to update" });
     }
-    console.log(updatedPost, "fff");
+    // console.log(updatedPost, "fff");
     return res.status(200).json(updatedPost);
   } catch (error) {
     console.error("Error updating post:", error);
