@@ -1,7 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-const User = require("./Models/User");
+const { User, Post } = require("./Models/User");
 const nodemailer = require("nodemailer");
 const randomstring = require("randomstring");
 
@@ -123,6 +123,113 @@ app.put("/reset-password", async (req, res) => {
     return res.status(200).json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Error resetting password:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/posts", async (req, res) => {
+  try {
+    const posts = await Post.find();
+    return res.status(200).json(posts);
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/addPost", async (req, res) => {
+  const { userId, content } = req.body;
+
+  try {
+    const newPost = new Post({ userId, content });
+    await newPost.save();
+    return res.status(201).json(newPost);
+  } catch (error) {
+    console.error("Error creating post:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.put("/post/:userId/:postId", async (req, res) => {
+  const userId = req.params.userId;
+  const postId = req.params.postId;
+  const { newContent } = req.body;
+
+  try {
+    const updatedPost = await Post.findOneAndUpdate(
+      { _id: postId, userId },
+      { content: newContent },
+      { new: true }
+    );
+
+    if (!updatedPost) {
+      return res
+        .status(404)
+        .json({ message: "Post not found or not authorized to update" });
+    }
+    console.log(updatedPost, "fff");
+    return res.status(200).json(updatedPost);
+  } catch (error) {
+    console.error("Error updating post:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.delete("/post/:userId/:postId", async (req, res) => {
+  const userId = req.params.userId;
+  const postId = req.params.postId;
+
+  try {
+    const deletedPost = await Post.findOneAndDelete({ _id: postId, userId });
+
+    if (!deletedPost) {
+      return res
+        .status(404)
+        .json({ message: "Post not found or not authorized to delete" });
+    }
+
+    return res.status(200).json({ message: "Post deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting post:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/post/like/:postId", async (req, res) => {
+  const postId = req.params.postId;
+
+  try {
+    const updatedPost = await Post.findByIdAndUpdate(
+      postId,
+      { $inc: { likes: 1 } },
+      { new: true }
+    );
+    if (!updatedPost) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+    return res.status(200).json(updatedPost);
+  } catch (error) {
+    console.error("Error liking post:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/post/comment/:postId", async (req, res) => {
+  const postId = req.params.postId;
+  const { comment } = req.body;
+
+  try {
+    const updatedPost = await Post.findByIdAndUpdate(
+      postId,
+      { $push: { comments: comment } },
+      { new: true }
+    );
+    if (!updatedPost) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+    return res.status(200).json(updatedPost);
+  } catch (error) {
+    console.error("Error adding comment to post:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

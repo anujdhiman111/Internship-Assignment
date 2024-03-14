@@ -7,4 +7,14 @@ const userSchema = new mongoose.Schema({
   resetPasswordCode: { type: String },
 });
 
-module.exports = mongoose.model("User", userSchema);
+const postSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
+  content: { type: String, required: true },
+  likes: { type: Number, default: 0 },
+  comments: [{ type: String }],
+});
+
+const User = mongoose.model("User", userSchema);
+const Post = mongoose.model("Post", postSchema);
+
+module.exports = { User, Post };
