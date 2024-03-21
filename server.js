@@ -4,6 +4,10 @@ const mongoose = require("mongoose");
 const { User, Post } = require("./Models/User");
 const nodemailer = require("nodemailer");
 const randomstring = require("randomstring");
+const authenticateToken = require("./middleware/auth");
+const secretToken = require("./config");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const app = express();
 const port = 3000;
@@ -18,6 +22,30 @@ mongoose
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.error("Error connecting to MongoDB:", err));
 
+const encryptionKey = crypto.randomBytes(32);
+
+const encryptData = (data) => {
+  const cipher = crypto.createCipheriv(
+    "aes-256-cbc",
+    encryptionKey,
+    crypto.randomBytes(16)
+  );
+  let encryptedData = cipher.update(data, "utf-8", "hex");
+  encryptedData += cipher.final("hex");
+  return encryptedData;
+};
+
+const decryptData = (encryptedData) => {
+  const decipher = crypto.createDecipheriv(
+    "aes-256-cbc",
+    encryptionKey,
+    crypto.randomBytes(16)
+  );
+  let decryptedData = decipher.update(encryptedData, "hex", "utf-8");
+  decryptedData += decipher.final("utf-8");
+  return decryptedData;
+};
+
 app.post("/signup", async (req, res) => {
   const { username, email, password } = req.body;
 
@@ -28,8 +56,12 @@ app.post("/signup", async (req, res) => {
         .status(400)
         .json({ message: "Username or email already exists" });
     }
-
-    const newUser = new User({ username, email, password });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({
+      username,
+      email,
+      password: hashedPassword,
+    });
     await newUser.save();
     return res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
@@ -47,11 +79,23 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid username or password" });
     }
 
-    if (user.password !== password) {
-      return res.status(401).json({ message: "Invalid username or password" });
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    return res.status(200).json({ message: "Login successful" });
+    const token = jwt.sign({ userId: user._id }, secretToken, {
+      expiresIn: "1h",
+    });
+
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      maxAge: 3600000,
+      sameSite: "Lax",
+    });
+
+    return res.status(200).json({ message: "Login successful", token: token });
   } catch (error) {
     console.error("Error logging in:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -88,7 +132,8 @@ app.post("/forgot-password", async (req, res) => {
     }
 
     const code = randomstring.generate({ length: 4, charset: "numeric" });
-    user.resetPasswordCode = code;
+    const encryptedCode = encryptData(code);
+    user.resetPasswordCode = encryptedCode;
     await user.save();
 
     const subject = "Password Reset Code";
@@ -112,7 +157,8 @@ app.put("/reset-password", async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "Email not found" });
     }
-    if (user.resetPasswordCode != code) {
+    const decryptedCode = decryptData(user.resetPasswordCode);
+    if (decryptedCode !== code) {
       return res.status(400).json({ message: "Invalid reset code" });
     }
 
@@ -127,7 +173,7 @@ app.put("/reset-password", async (req, res) => {
   }
 });
 
-app.get("/posts", async (req, res) => {
+app.get("/posts", authenticateToken, async (req, res) => {
   try {
     const posts = await Post.find();
     return res.status(200).json(posts);
@@ -137,7 +183,7 @@ app.get("/posts", async (req, res) => {
   }
 });
 
-app.post("/addPost", async (req, res) => {
+app.post("/addPost", authenticateToken, async (req, res) => {
   const { userId, content } = req.body;
 
   try {
@@ -150,7 +196,7 @@ app.post("/addPost", async (req, res) => {
   }
 });
 
-app.put("/post/:userId/:postId", async (req, res) => {
+app.put("/post/:userId/:postId", authenticateToken, async (req, res) => {
   const userId = req.params.userId;
   const postId = req.params.postId;
   const { newContent } = req.body;
@@ -175,7 +221,7 @@ app.put("/post/:userId/:postId", async (req, res) => {
   }
 });
 
-app.delete("/post/:userId/:postId", async (req, res) => {
+app.delete("/post/:userId/:postId", authenticateToken, async (req, res) => {
   const userId = req.params.userId;
   const postId = req.params.postId;
 
@@ -195,7 +241,7 @@ app.delete("/post/:userId/:postId", async (req, res) => {
   }
 });
 
-app.post("/post/like/:postId", async (req, res) => {
+app.post("/post/like/:postId", authenticateToken, async (req, res) => {
   const postId = req.params.postId;
 
   try {
@@ -214,7 +260,7 @@ app.post("/post/like/:postId", async (req, res) => {
   }
 });
 
-app.post("/post/comment/:postId", async (req, res) => {
+app.post("/post/comment/:postId", authenticateToken, async (req, res) => {
   const postId = req.params.postId;
   const { comment } = req.body;
 
